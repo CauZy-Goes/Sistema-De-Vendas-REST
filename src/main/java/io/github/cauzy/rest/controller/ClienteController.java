@@ -9,13 +9,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
-@Controller //Spring Web
-@RequestMapping("/api/clientes")
+@RestController //ja vem com o @responsebody
+@RequestMapping("api/clientes")
 public class ClienteController {
 
     private Clientes clientes;
@@ -31,64 +32,58 @@ public class ClienteController {
             consumes = {"application/json", "application/xml"}, //diz qual o formato que vai ser enviado
             produces = {"application/json", "application/xml"} //diz qual o formato que vai ser retornado
     )
-    @ResponseBody //reponde no body
+//    @ResponseBody //reponde no body
     public String helloCliente(@PathVariable("nome") String nomeCliente){
         return String.format("Hello %s", nomeCliente);
     }
 
     @GetMapping("/{id}")
-    @ResponseBody //transforma em json
-    public ResponseEntity<Cliente> getClienteById(@PathVariable("id") Integer id){
-        Optional<Cliente> cliente = clientes.findById(id);
-
-        if (cliente.isPresent()){
-            HttpHeaders headers = new HttpHeaders();
-            headers.put("Authorization", Collections.singletonList("token"));
-            ResponseEntity<Cliente> responseEntity = new ResponseEntity<>(cliente.get() , headers ,HttpStatus.OK);
-
-            return  responseEntity;
-//            ou
-//            return ResponseEntity.ok(cliente.get()); //corpo da resposta http
-        }
-        return ResponseEntity.notFound().build();
+//    @ResponseBody //transforma em json
+    public Cliente getClienteById(@PathVariable("id") Integer id){
+        return clientes
+                .findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente nao encontrado"));
     }
 
     @PostMapping
-    @ResponseBody // oque retorna
-    public ResponseEntity<Cliente> save(@RequestBody /* oque envia */  Cliente cliente){
-        Cliente clienteSalvo = clientes.save(cliente);
-        return ResponseEntity.ok(clienteSalvo);
+    @ResponseStatus(HttpStatus.CREATED) // define o codigo de created
+//    @ResponseBody // oque retorna
+    public Cliente save(@RequestBody /* oque envia */  Cliente cliente){
+        return clientes.save(cliente);
     }
 
     @DeleteMapping("/{id}")
-    @ResponseBody
-    public ResponseEntity delete(@PathVariable("id") Integer id){
-        Optional<Cliente> cliente = clientes.findById(id);
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+//    @ResponseBody
+    public void delete(@PathVariable("id") Integer id){
+        clientes.findById(id)
+                .map(cliente ->{
+                        clientes.delete(cliente);
+                        return cliente;
+                })
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente nao encontrado"));
 
-        if(cliente.isPresent()){
-            clientes.delete(cliente.get()); // o optinal precisa do .get()
-            return ResponseEntity.noContent().build();
-        }
-        return ResponseEntity.notFound().build();
     }
 
     @PutMapping("/{id}")//atualiza integralmente
-    @ResponseBody
-    public ResponseEntity update(@PathVariable("id") Integer id, /* so precisa da String "id" se for diferente */
-                                 @RequestBody Cliente cliente){
-        return clientes.findById(id).map( clienteExistente -> {
-            cliente.setId(clienteExistente.getId());
-            clientes.save(cliente);
-            return ResponseEntity.noContent().build();
-        }).orElseGet(() -> ResponseEntity.notFound().build()); //suplier recebe nada mas retorna alguma coisa
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+//    @ResponseBody
+    public void update(@PathVariable("id") Integer id, /* so precisa da String "id" se for diferente */
+                       @RequestBody Cliente cliente){
+        clientes.findById(id).
+                map( clienteExistente -> {
+                    cliente.setId(clienteExistente.getId());
+                    clientes.save(cliente);
+                    return clienteExistente;})
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente nao encontrado"));
     }
 
     @GetMapping
-    public ResponseEntity find(Cliente filtro){
+    public List<Cliente> find(Cliente filtro){
         ExampleMatcher matcher = ExampleMatcher.matching().withIgnoreCase().withStringMatcher(ExampleMatcher.StringMatcher.CONTAINING); //configura para encontrar os clientes atraves das propiedades
         // withIgnoreCasa = ignora o camel case, withStringMatcher.containing = se a string conter "ca" de "caua" ele aceita
         Example example = Example.of(filtro, matcher); //extrai as propiedades
         List<Cliente> lista = clientes.findAll(example);
-        return ResponseEntity.ok(lista);
+        return clientes.findAll(example);
     }
 }
